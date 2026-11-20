@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+  output = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model AuthRateLimit {
+  key String @id @db.Char(64)
+  hits Int
+  expiresAt DateTime
+  @@index([expiresAt])
+  @@map("auth_rate_limits")
+}
+
+model User {
+  id        Int        @id @default(autoincrement())
+  email     String     @unique
+  fullName  String
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  roles     UserRole[]
+  emailVerifiedAt DateTime?
+  credential PasswordCredential?
+  sessions AuthSession[]
+  tokens AuthToken[]
+  auditEvents AuthAuditEvent[]
+
+  @@map("users")
+}
+
+model PasswordCredential {
+  userId Int @id
+  passwordHash String @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("password_credentials")
+}
+
+model AuthSession {
+  id String @id @db.VarChar(64)
+  userId Int
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+  accessTokens AccessToken[]
+  @@index([userId, revokedAt])
+  @@map("auth_sessions")
+}
+
+model AccessToken {
+  hash String @id @db.Char(64)
+  sessionId String @db.VarChar(64)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  session AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId])
+  @@map("access_tokens")
+}
+
+model RefreshToken {
+  hash String @id @db.Char(64)
+  sessionId String @db.VarChar(64)
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  session AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+model AuthToken {
+  hash String @id @db.Char(64)
+  userId Int
+  purpose String @db.VarChar(20)
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailJob AuthEmailOutbox?
+  @@index([userId, purpose])
+  @@map("auth_tokens")
+}
+
+model AuthEmailOutbox {
+  id String @id @db.VarChar(36)
+  tokenHash String @unique @db.Char(64)
+  purpose String @db.VarChar(20)
+  payload String? @db.Text
+  state String @db.VarChar(20)
+  attempts Int @default(0)
+  createdAt DateTime @default(now())
+  nextAttemptAt DateTime @default(now())
+  claimId String? @db.VarChar(36)
+  leaseUntil DateTime?
+  completedAt DateTime?
+  errorCategory String? @db.VarChar(32)
+  token AuthToken @relation(fields: [tokenHash], references: [hash], onDelete: Cascade)
+  @@index([state, nextAttemptAt])
+  @@index([state, leaseUntil])
+  @@index([completedAt])
+  @@map("auth_email_outbox")
+}
+
+model AuthAuditEvent {
+  id Int @id @default(autoincrement())
+  userId Int?
+  event String @db.VarChar(40)
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
+  @@map("auth_audit_events")
+}
+
+model Role {
+  id          Int        @id @default(autoincrement())
+  code        String     @unique
+  name        String
+  description String?
+  createdAt   DateTime   @default(now())
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId     Int
+  roleId     Int
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  role       Role     @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}

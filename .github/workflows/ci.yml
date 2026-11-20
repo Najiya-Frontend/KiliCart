@@ -1,0 +1,85 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_disposable
+          MYSQL_ROOT_HOST: "%"
+          MYSQL_DATABASE: kilicart_dev
+          MYSQL_USER: ci_runner
+          MYSQL_PASSWORD: ci_disposable
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -p$MYSQL_ROOT_PASSWORD"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: mysql://ci_runner:ci_disposable@127.0.0.1:3306/kilicart_dev
+      TEST_DATABASE_URL: mysql://ci_runner:ci_disposable@127.0.0.1:3306/kilicart_test
+      SHADOW_DATABASE_URL: mysql://ci_runner:ci_disposable@127.0.0.1:3306/kilicart_unused_shadow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Prepare isolated databases
+        run: |
+          MYSQL_PWD=ci_root_disposable mysql -h 127.0.0.1 -u root -e "CREATE DATABASE kilicart_test; GRANT ALL PRIVILEGES ON kilicart_test.* TO 'ci_runner'@'%';"
+          npx prisma migrate deploy
+          npx prisma db seed
+      - run: npx prisma validate
+      - run: npm test
+      - run: npm run test:integration
+  website:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.example.invalid/api/v1
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [backend, website]
+        mode: [all, production]
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Audit all dependencies
+        if: matrix.mode == 'all'
+        run: npm audit
+      - name: Audit production dependencies
+        if: matrix.mode == 'production'
+        run: npm audit --omit=dev
