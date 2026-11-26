@@ -268,9 +268,33 @@ only. Accounts may hold multiple roles. Internal services check users and role
 codes, make assignment idempotent, and serialize SUPER_ADMIN revocations to
 protect the final active holder. Any future user deactivation or deletion
 workflow must enforce the same invariant and coordinate on the SUPER_ADMIN
-role row; direct database changes bypass this service protection. Role changes
-are not exposed through an API. Seller business approval and rider verification
-are separate future workflows; a role alone does not grant approval.
+role row; direct database changes bypass this service protection. General role
+changes are not exposed through an API. Seller onboarding is implemented as a
+separate workflow: applicants retain CUSTOMER, approval transactionally creates
+one SellerAccount and assigns SELLER, and seller operations require both the
+role and an ACTIVE account. Rider verification remains a future workflow.
+
+Seller onboarding stores historical applications with at most one pending
+application per user, enforced by a transaction that locks the user row before
+checking and inserting. MySQL has no partial unique index for the pending-only
+condition, so all application submission must continue through this service.
+Admin decisions record actor and time, rejection stores separate internal and
+applicant-facing messages, and seller status changes have dedicated audit rows.
+Each seller account has at most one store. Store and product submission,
+moderation, rejection/resubmission, seller-owned editing, suspension checks,
+public visibility queries and catalogue review audits are implemented in the
+seller catalogue management foundation. See `docs/CATALOGUE.md` for lifecycle,
+API and image-storage details. Product images use a backend-only Cloudinary
+integration behind a provider interface; provider credentials stay in backend
+environment configuration and image bytes are not stored in MySQL or local
+production files.
+
+The backend endpoints are `POST/GET /api/v1/seller-applications` (the GET path
+is `/me`), `GET /api/v1/admin/seller-applications` and its `/:id` detail,
+`POST /api/v1/admin/seller-applications/:id/decision`,
+`POST /api/v1/admin/sellers/:userId/status`, and
+`POST/GET /api/v1/seller/stores` (the GET path is `/me`). Admin list results
+are paginated. Internal rejection reasons are visible only to admins.
 
 `GET /api/v1/roles` exposes only public role codes, display names and general
 descriptions. The health endpoints remain available. Authentication resolves
@@ -801,7 +825,11 @@ Development environment:
 Visual Studio Code.
 
 Current milestone:
-Phase 1 - Foundation.
+Phase 2 - Marketplace foundation. Seller onboarding, store/product management
+and review APIs, and customer catalogue discovery are implemented. Seller/admin
+frontends, cart, checkout and commerce workflows remain.
 
 Next task:
-Complete authentication integration testing, delivery integration and security review.
+Implement the approved seller onboarding and catalogue management frontends,
+then continue cart and commerce work. Authentication delivery integration and
+security review items remain tracked in `docs/AUTHENTICATION.md`.

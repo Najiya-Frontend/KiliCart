@@ -7,6 +7,12 @@ import { env } from "./config/env.js";
 import healthRoutes from "./routes/health.routes.js";
 import roleRoutes from "./routes/role.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import sellerRoutes from "./routes/seller.routes.js";
+import adminSellerRoutes from "./routes/admin-seller.routes.js";
+import catalogueRoutes from "./routes/catalogue.routes.js";
+import sellerCatalogueRoutes from "./routes/seller-catalogue.routes.js";
+import adminCatalogueRoutes from "./routes/admin-catalogue.routes.js";
+import sellerProductImageRoutes from "./routes/seller-product-images.routes.js";
 
 import {
   notFoundHandler,
@@ -48,6 +54,12 @@ app.use(
 app.use("/api/v1/health", healthRoutes);
 app.use("/api/v1/roles", roleRoutes);
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1", sellerRoutes);
+app.use("/api/v1/admin", adminSellerRoutes);
+app.use("/api/v1", sellerCatalogueRoutes);
+app.use("/api/v1", sellerProductImageRoutes);
+app.use("/api/v1/admin", adminCatalogueRoutes);
+app.use("/api/v1", catalogueRoutes);
 
 // Error handlers
 app.use(notFoundHandler);

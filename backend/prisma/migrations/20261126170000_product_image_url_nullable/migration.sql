@@ -1,0 +1,1 @@
+ALTER TABLE `product_images` MODIFY COLUMN `url` VARCHAR(2048) NULL;

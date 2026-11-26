@@ -19,17 +19,21 @@ implementing or modifying the application.
 
 ## Project Status
 
-Phase 1: Foundation and architecture.
+Phase 2, Step 1B: Seller onboarding and store management backend foundation.
 
-The Express API and Prisma database foundation are in place. The initial
-identity migration has been applied to the local development database. See
-the local database foundation section in the architecture document.
+The Express API and Prisma database foundation are in place. Seller
+applications, admin review, seller account status, audit records, and draft
+store management are implemented in the backend. Frontend seller/admin pages,
+catalogue, and commerce remain future work. See the local database foundation
+section in the architecture document.
 
 ## Roles and authorization
 
 The platform defines CUSTOMER, SELLER, RIDER, ADMIN and SUPER_ADMIN. An
-account can hold multiple roles. A seller or rider role alone does not approve
-a business or verify a rider; those workflows are future work. From `backend`,
+account can hold multiple roles. Seller approval is separate from the role:
+approval creates a seller account and assigns SELLER transactionally, while
+seller operations require an ACTIVE seller account. Rider verification remains
+future work. From `backend`,
 run `npx prisma db seed` to create or update the five definitions without
 changing assignments or creating users.
 

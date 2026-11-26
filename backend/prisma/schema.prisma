@@ -28,6 +28,13 @@ model User {
   sessions AuthSession[]
   tokens AuthToken[]
   auditEvents AuthAuditEvent[]
+  sellerApplications SellerApplication[] @relation("SellerApplicant")
+  reviewedSellerApplications SellerApplication[] @relation("SellerApplicationReviewer")
+  sellerAccount SellerAccount?
+  sellerAdminAudits SellerAdminAudit[] @relation("SellerAuditActor")
+  sellerTargetAudits SellerAdminAudit[] @relation("SellerAuditTarget")
+  catalogueAuditActions CatalogueReviewAudit[] @relation("CatalogueAuditActor")
+  catalogueAuditTargets CatalogueReviewAudit[] @relation("CatalogueAuditTarget")
 
   @@map("users")
 }
@@ -139,4 +146,209 @@ model UserRole {
 
   @@id([userId, roleId])
   @@map("user_roles")
+}
+
+enum SellerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SellerAccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum StoreStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+}
+
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+enum ProductImageStatus {
+  UPLOAD_PENDING
+  ACTIVE
+  DELETE_PENDING
+}
+
+model SellerApplication {
+  id Int @id @default(autoincrement())
+  userId Int
+  businessName String @db.VarChar(191)
+  businessType String @db.VarChar(100)
+  contactPhone String @db.VarChar(32)
+  businessAddress String @db.VarChar(500)
+  description String? @db.VarChar(1000)
+  status SellerApplicationStatus @default(PENDING)
+  submittedAt DateTime @default(now())
+  decidedAt DateTime?
+  decidedById Int?
+  internalRejectionReason String? @db.VarChar(1000)
+  applicantMessage String? @db.VarChar(1000)
+  applicant User @relation("SellerApplicant", fields: [userId], references: [id], onDelete: Restrict)
+  decidedBy User? @relation("SellerApplicationReviewer", fields: [decidedById], references: [id], onDelete: SetNull)
+  sellerAccount SellerAccount?
+  audits SellerAdminAudit[]
+  @@index([userId, status, submittedAt])
+  @@index([status, submittedAt])
+  @@index([decidedById, decidedAt])
+  @@map("seller_applications")
+}
+
+model SellerAccount {
+  id Int @id @default(autoincrement())
+  userId Int @unique
+  applicationId Int @unique
+  status SellerAccountStatus @default(ACTIVE)
+  approvedAt DateTime @default(now())
+  suspendedAt DateTime?
+  suspensionReason String? @db.VarChar(1000)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  application SellerApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  store Store?
+  audits SellerAdminAudit[]
+  catalogueAudits CatalogueReviewAudit[]
+  @@index([status, approvedAt])
+  @@map("seller_accounts")
+}
+
+model Store {
+  id Int @id @default(autoincrement())
+  sellerAccountId Int @unique
+  name String @db.VarChar(191)
+  slug String @unique @db.VarChar(191)
+  description String? @db.VarChar(1000)
+  contactPhone String? @db.VarChar(32)
+  location String? @db.VarChar(500)
+  status StoreStatus @default(DRAFT)
+  rejectionReason String? @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sellerAccount SellerAccount @relation(fields: [sellerAccountId], references: [id], onDelete: Restrict)
+  products Product[]
+  reviewAudits CatalogueReviewAudit[]
+  @@map("stores")
+}
+
+model Category {
+  id          Int            @id @default(autoincrement())
+  name        String         @db.VarChar(120)
+  slug        String         @unique @db.VarChar(160)
+  description String?        @db.VarChar(1000)
+  imageUrl    String?        @db.VarChar(2048)
+  status      CategoryStatus @default(ACTIVE)
+  parentId    Int?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  parent      Category?      @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Category[]     @relation("CategoryTree")
+  products    Product[]
+
+  @@index([parentId, status, name])
+  @@index([status, name])
+  @@map("categories")
+}
+
+model Product {
+  id             Int           @id @default(autoincrement())
+  storeId        Int
+  categoryId     Int
+  name           String        @db.VarChar(191)
+  slug           String        @unique @db.VarChar(191)
+  description    String?       @db.Text
+  price          Decimal       @db.Decimal(10, 2)
+  status         ProductStatus @default(DRAFT)
+  rejectionReason String?      @db.VarChar(1000)
+  stockQuantity  Int           @default(0) @db.UnsignedInt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  store          Store         @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category       Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  images         ProductImage[]
+  reviewAudits   CatalogueReviewAudit[]
+
+  @@index([status, createdAt])
+  @@index([categoryId, status, createdAt])
+  @@index([storeId, status, createdAt])
+  @@index([status, price])
+  @@map("products")
+}
+
+model CatalogueReviewAudit {
+  id Int @id @default(autoincrement())
+  actorUserId Int
+  targetUserId Int
+  sellerAccountId Int
+  storeId Int?
+  productId Int?
+  action String @db.VarChar(40)
+  fromStatus String? @db.VarChar(20)
+  toStatus String? @db.VarChar(20)
+  reason String? @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  actor User @relation("CatalogueAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  target User @relation("CatalogueAuditTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  sellerAccount SellerAccount @relation(fields: [sellerAccountId], references: [id], onDelete: Restrict)
+  store Store? @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  product Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([sellerAccountId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([productId, createdAt])
+  @@map("catalogue_review_audits")
+}
+
+model ProductImage {
+  id              Int               @id @default(autoincrement())
+  productId       Int
+  url             String?           @db.VarChar(2048)
+  provider        String            @default("legacy") @db.VarChar(32)
+  providerAssetId String?           @db.VarChar(255)
+  altText         String?           @db.VarChar(255)
+  position        Int               @default(0) @db.UnsignedInt
+  status          ProductImageStatus @default(ACTIVE)
+  createdAt       DateTime          @default(now())
+  product         Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, position])
+  @@unique([provider, providerAssetId])
+  @@index([productId, status, position])
+  @@map("product_images")
+}
+
+model SellerAdminAudit {
+  id Int @id @default(autoincrement())
+  actorUserId Int
+  targetUserId Int
+  applicationId Int?
+  sellerAccountId Int?
+  action String @db.VarChar(40)
+  fromStatus String? @db.VarChar(20)
+  toStatus String @db.VarChar(20)
+  reason String? @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  actor User @relation("SellerAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  target User @relation("SellerAuditTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  application SellerApplication? @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  sellerAccount SellerAccount? @relation(fields: [sellerAccountId], references: [id], onDelete: Restrict)
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([applicationId, createdAt])
+  @@index([sellerAccountId, createdAt])
+  @@map("seller_admin_audits")
 }
